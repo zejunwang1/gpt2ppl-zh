@@ -19,7 +19,7 @@ def Chinese_chars_num(text):
             count += 1
     return count
 
-def split_sentence(text, min_length=8, max_length=510, return_loc=False):
+def split_sentence(text, min_length=8, max_length=512, return_loc=False):
     pos_list = []
     sentence_list = []
     lines = text.split("\n")
@@ -29,8 +29,11 @@ def split_sentence(text, min_length=8, max_length=510, return_loc=False):
             pos += len(line)
             pos += 1
             continue
-        line = re.sub("([。！？!?…])(.)", r"\1\n\2", line)
+
+        line = re.sub("([。！？；!?;])([^”’])", r"\1\n\2", line)
+        line = re.sub("([。！？；!?;][”’])(.)", r"\1\n\2", line)
         line = line.split("\n")
+
         begin = 0
         end = len(line)
         while begin < end:
@@ -53,7 +56,7 @@ def split_sentence(text, min_length=8, max_length=510, return_loc=False):
                 else:
                     pos_list.append(pos)
                     sentence_list.append(sentence)
-                    pos += len(sentence)
+                pos += len(sentence)
             else:
                 pos_list.append(pos)
                 sentence_list.append(sentence)
@@ -75,6 +78,7 @@ class GPT2PPL:
         assert device in ["cuda", "cpu"]
         self.model = GPT2LMHeadModel.from_pretrained(model_name_or_path).to(device)
         
+        assert tokenizer_mode in ["bert", "gpt2"]
         if tokenizer_mode == "bert":
             self.tokenizer = BertTokenizerFast.from_pretrained(model_name_or_path)
         else:
@@ -85,7 +89,13 @@ class GPT2PPL:
         self.max_positions = self.model.config.n_positions
     
     def get_ppl(self, text):
-        encodings = self.tokenizer(text.strip(), add_special_tokens=False, return_tensors="pt")
+        encodings = self.tokenizer(
+            text, 
+            add_special_tokens=False, 
+            return_token_type_ids=False,
+            return_attention_mask=False,
+            return_tensors="pt"
+        )
         seq_len = encodings.input_ids.size(1)
         
         nlls = []
@@ -99,7 +109,7 @@ class GPT2PPL:
             
             with torch.no_grad():
                 outputs = self.model(input_ids, labels=target_ids)
-
+                
                 # loss is calculated using CrossEntropyLoss which averages over input tokens.
                 # Multiply it with trg_len to get the summation instead of average.
                 # We will take average over all the tokens to get the true average
@@ -112,11 +122,10 @@ class GPT2PPL:
             if end_loc == seq_len:
                 break
 
-        ppl = torch.exp(torch.stack(nlls).sum() / end_loc)
-        ppl = ppl.cpu().tolist()
+        ppl = torch.exp(torch.stack(nlls).sum() / end_loc).tolist()
         return ppl
         
-    def get_ppl_per_sentence(self, text, ratio=0.4, min_length=8, max_length=510, return_loc=False):
+    def get_ppl_per_sentence(self, text, ratio=0.4, min_length=8, max_length=512, return_loc=False):
         outputs = split_sentence(text, min_length, max_length, return_loc)
         sentence_list = outputs
         if return_loc:
@@ -135,4 +144,3 @@ class GPT2PPL:
                 ppl_list.append((sentence, ppl))
 
         return ppl_list
-
