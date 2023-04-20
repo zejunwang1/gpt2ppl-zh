@@ -15,7 +15,7 @@ def _get_readme():
 
 setup(
     name='gpt2ppl-zh',
-    version='0.2.0',
+    version='0.3.0',
     author='wangzejun',
     author_email='wangzejunscut@126.com',
     description='Chinese sentence perplexity calculation based on GPT2 pre-trained model',
